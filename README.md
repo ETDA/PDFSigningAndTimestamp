@@ -1,2 +1,2 @@
 # PDFSigningAndTimestamp
-Simple example project for PDF signing and timstamping
+Simple example project for PDF signing and timstamping using PDFbox
