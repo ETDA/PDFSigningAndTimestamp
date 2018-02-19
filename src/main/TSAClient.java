@@ -38,6 +38,7 @@ import org.bouncycastle.tsp.TimeStampRequest;
 import org.bouncycastle.tsp.TimeStampRequestGenerator;
 import org.bouncycastle.tsp.TimeStampResponse;
 import org.bouncycastle.tsp.TimeStampToken;
+import org.bouncycastle.util.encoders.Base64;
 
 /**
  * Time Stamping Authority (TSA) Client [RFC 3161].
@@ -124,13 +125,15 @@ public class TSAClient
         connection.setDoOutput(true);
         connection.setDoInput(true);
         connection.setRequestProperty("Content-Type", "application/timestamp-query");
-        connection.setRequestProperty("Content-length", String.valueOf(request.length));
+
+        String authen = new String(Base64.encode((username + ":" + password).getBytes()));
 
         LOG.debug("Established connection to TSA server");
 
         if (username != null && password != null && !username.isEmpty() && !password.isEmpty())
         {
-            connection.setRequestProperty(username, password);
+//            connection.setRequestProperty(username, password);
+        	connection.setRequestProperty("Authorization", "Basic " + authen);
         }
 
         // read response
