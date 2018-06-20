@@ -8,12 +8,17 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.SignatureException;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.CRL;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -159,7 +164,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 	 * 
 	 */
 	public static void signWithTSA(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
-			String filePath, String urlTsaClient, String userTsaClient, String passwordTsaClient)
+			String filePath, String tsaUrl, String keystorePath, String keystorePassword, String keystoreType)
 			throws IOException, GeneralSecurityException, SignatureException {
 		char[] password = passwordP12.toCharArray();
 
@@ -174,11 +179,11 @@ public class SignAndTimeStamp implements SignatureInterface {
             certificateChain = keystore.getCertificateChain(alias);
         }
 
-		if(!urlTsaClient.isEmpty() && urlTsaClient != null){
+		if(!tsaUrl.isEmpty() && tsaUrl != null){
 			
 			MessageDigest digest = MessageDigest.getInstance("SHA-256");
-			tsaClient = new TSAClient(new URL(urlTsaClient), userTsaClient,
-					passwordTsaClient, digest);
+			tsaClient = new TSAClient(new URL(tsaUrl), filePath+keystorePath,
+					keystorePassword,keystoreType, digest);
 		}
 		
 		File inFile = new File(filePath + inputFileName);
@@ -187,7 +192,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 	}
 	
 	private CMSSignedData signTimeStamps(CMSSignedData signedData)
-            throws IOException, TSPException
+            throws IOException, TSPException, UnrecoverableKeyException, KeyManagementException, KeyStoreException, NoSuchAlgorithmException, CertificateException
     {
         SignerInformationStore signerStore = signedData.getSignerInfos();
         List<SignerInformation> newSigners = new ArrayList<>();
@@ -201,7 +206,7 @@ public class SignAndTimeStamp implements SignatureInterface {
         return CMSSignedData.replaceSigners(signedData, new SignerInformationStore(newSigners));
     }
 	private SignerInformation signTimeStamp(SignerInformation signer)
-            throws IOException, TSPException
+            throws IOException, TSPException, UnrecoverableKeyException, KeyManagementException, KeyStoreException, NoSuchAlgorithmException, CertificateException
     {
         AttributeTable unsignedAttributes = signer.getUnsignedAttributes();
 
@@ -228,5 +233,4 @@ public class SignAndTimeStamp implements SignatureInterface {
 
         return newSigner;
     }
-
 }
