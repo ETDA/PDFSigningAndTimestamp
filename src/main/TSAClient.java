@@ -1,4 +1,5 @@
 package main;
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -17,14 +18,27 @@ package main;
  */
 
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.URL;
 import java.net.URLConnection;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.security.Security;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -33,6 +47,7 @@ import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.nist.NISTObjectIdentifiers;
 import org.bouncycastle.asn1.oiw.OIWObjectIdentifiers;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.tsp.TSPException;
 import org.bouncycastle.tsp.TimeStampRequest;
 import org.bouncycastle.tsp.TimeStampRequestGenerator;
@@ -49,11 +64,15 @@ public class TSAClient
 {
     private static final Log LOG = LogFactory.getLog(TSAClient.class);
 
-    private final URL url;
-    private final String username;
-    private final String password;
-    private final MessageDigest digest;
-
+    private  URL url;
+    private  String username;
+    private  String password;
+    private  MessageDigest digest;
+    private  String keystoreFile;
+    private  String keystorePassword;
+    private  String keystoreType;
+    private  Boolean isCertAuthen = false;
+ 
     /**
      *
      * @param url the URL of the TSA service
@@ -67,7 +86,17 @@ public class TSAClient
         this.username = username;
         this.password = password;
         this.digest = digest;
-    }
+    }    
+    
+    public TSAClient(URL url, String keystoreFile, String keystorePassword,String keystoreType, MessageDigest digest)
+    {
+        this.url = url;
+        this.keystoreFile = keystoreFile;
+        this.keystorePassword = keystorePassword;
+        this.keystoreType = keystoreType;
+        this.digest = digest;
+        this.isCertAuthen = true;
+    }    
 
     /**
      *
@@ -75,8 +104,13 @@ public class TSAClient
      * @return the encoded time stamp token
      * @throws IOException if there was an error with the connection or data from the TSA server,
      *                     or if the time stamp response could not be validated
+     * @throws CertificateException 
+     * @throws NoSuchAlgorithmException 
+     * @throws KeyStoreException 
+     * @throws KeyManagementException 
+     * @throws UnrecoverableKeyException 
      */
-    public byte[] getTimeStampToken(byte[] messageImprint) throws IOException
+    public byte[] getTimeStampToken(byte[] messageImprint) throws IOException, UnrecoverableKeyException, KeyManagementException, KeyStoreException, NoSuchAlgorithmException, CertificateException
     {
         digest.reset();
         byte[] hash = digest.digest(messageImprint);
@@ -92,7 +126,14 @@ public class TSAClient
         TimeStampRequest request = tsaGenerator.generate(oid, hash, BigInteger.valueOf(nonce));
 
         // get TSA response
-        byte[] tsaResponse = getTSAResponse(request.getEncoded());
+        byte[] tsaResponse = null ;
+        
+        if(isCertAuthen) {
+        	tsaResponse = getTSAResponseWithCertificate(request.getEncoded());
+        }
+        else {
+        	tsaResponse = getTSAResponse(request.getEncoded());
+        }
 
         TimeStampResponse response;
         try
@@ -119,7 +160,8 @@ public class TSAClient
     private byte[] getTSAResponse(byte[] request) throws IOException
     {
         LOG.debug("Opening connection to TSA server");
-
+        
+       
         // todo: support proxy servers
         URLConnection connection = url.openConnection();
         connection.setDoOutput(true);
@@ -132,9 +174,82 @@ public class TSAClient
 
         if (username != null && password != null && !username.isEmpty() && !password.isEmpty())
         {
-//            connection.setRequestProperty(username, password);
+//           connection.setRequestProperty(username, password);
         	connection.setRequestProperty("Authorization", "Basic " + authen);
         }
+
+        // read response
+        OutputStream output = null;
+        try
+        {
+            output = connection.getOutputStream();
+            output.write(request);
+            output.flush();
+        }
+        finally
+        {
+            IOUtils.closeQuietly(output);
+        }
+
+        LOG.debug("Waiting for response from TSA server");
+
+        InputStream input = null;
+        byte[] response;
+        try
+        {
+            input = connection.getInputStream();
+            response = IOUtils.toByteArray(input);
+        }
+        finally
+        {
+            IOUtils.closeQuietly(input);
+        }
+
+        LOG.debug("Received response from TSA server");
+
+        return response;
+    }
+    
+ // gets response data for the given encoded TimeStampRequest data with with certificate
+    // throws IOException if a connection to the TSA cannot be established
+    private byte[] getTSAResponseWithCertificate(byte[] request) throws IOException, KeyStoreException, NoSuchAlgorithmException, CertificateException, UnrecoverableKeyException, KeyManagementException
+    {
+        LOG.debug("Opening connection to TSA server with HTTPS certificate authen");        
+       
+		
+		Security.addProvider(new BouncyCastleProvider());
+		
+		KeyStore clientKeystore = KeyStore.getInstance(keystoreType);
+		
+		clientKeystore.load(new FileInputStream(keystoreFile), keystorePassword.toCharArray());
+		
+		KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+		kmf.init(clientKeystore, keystorePassword.toCharArray());
+
+		SSLContext ctx = SSLContext.getInstance("TLS");
+		ctx.init(kmf.getKeyManagers(),null, new SecureRandom());
+		SSLSocketFactory sf = ctx.getSocketFactory();
+        
+        // todo: support proxy servers
+		HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
+		connection.setSSLSocketFactory(sf);
+        connection.setDoOutput(true);
+        connection.setDoInput(true);
+        connection.setRequestMethod("POST");
+        connection.setRequestProperty("Content-Type", "application/timestamp-query");
+        connection.setRequestProperty("charset","utf-8");		
+
+
+        LOG.debug("Established connection to TSA server");
+
+		try{
+			connection.connect();
+		}
+		catch (IOException ioe) 
+		{
+			throw  ioe;
+		}
+
 
         // read response
         OutputStream output = null;

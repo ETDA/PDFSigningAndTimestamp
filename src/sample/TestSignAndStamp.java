@@ -16,9 +16,10 @@ public class TestSignAndStamp {
 		String inputFileName = "pdfA3.pdf";
 		String outputFile = "tsa_signed.pdf";
 		String filePath = "resources/";
-		String urlTsaClient = "http://test.time.teda.th";
-		String userTsaClient = "";
-		String passwordTsaClient = "";
+		String tsaUrl = "https://test.time.teda.th";
+		String keystorePath = "KeystorePath";
+		String keystorePassword = "KeystorePassword";
+		String keystoreType = "PKCS12";
 		*/
 		
 		String passwordP12 = args[0];
@@ -26,10 +27,12 @@ public class TestSignAndStamp {
 		String inputFileName = args[2];
 		String outputFile = args[3];
 		String filePath = args[4];
-		String urlTsaClient = args[5];
-		String userTsaClient = args[6];
-		String passwordTsaClient = args[7];
-		SignAndTimeStamp.signWithTSA(passwordP12, inputFileP12, inputFileName, outputFile, filePath, urlTsaClient, userTsaClient, passwordTsaClient);
+		String tsaUrl = args[5];
+		String keystorePath = args[6];
+		String keystorePassword = args[7];
+		String keystoreType = args[8];
+		
+		SignAndTimeStamp.signWithTSA(passwordP12, inputFileP12, inputFileName, outputFile, filePath, tsaUrl, keystorePath, keystorePassword,keystoreType);
 
 		System.out.println("********Sign And TimeStamp Done**********");
 	}
