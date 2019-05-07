@@ -16,7 +16,7 @@ public class TestSignAndStamp {
 		String inputFileName = "pdfA3.pdf";
 		String outputFile = "tsa_signed.pdf";
 		String filePath = "resources/";
-		String tsaUrl = "https://test.time.teda.th";
+		String tsaUrl = "https://time-test.teda.th";
 		String keystorePath = "KeystorePath";
 		String keystorePassword = "KeystorePassword";
 		String keystoreType = "PKCS12";
