@@ -57,6 +57,8 @@ import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.TSPException;
 import org.bouncycastle.util.Store;
 
+import util.X509Util;
+
 /**
  * The SignAndTimeStamp class is used to sign PDF(.pdf) with TSA 
  * 
@@ -83,26 +85,38 @@ public class SignAndTimeStamp implements SignatureInterface {
 			catalogDict.setNeedToBeUpdated(true);
 
 			// =========================== For LTV Enable ===========================
-	        byte[][] certs = new byte[certificateChain.length][];
-	        for(int i =0;i<certificateChain.length;i++){
-	        	certs[i] = certificateChain[i].getEncoded();
-	        }
-	        
-	        List<CRL> crlList = new DssHelper().readCRLsFromCert((X509Certificate) certificateChain[0]);
-	        byte[][] crls = new byte[crlList.size()][];
-	        for (int i = 0 ; i < crlList.size();i++) {
+			
+			//Sorted Certificate 0 = E Entity , 1 = intermediate , 2 = root	 			
+			Certificate[] sortedCertificateChain = X509Util.SortX509Chain(certificateChain,certificate);
+			certificateChain = sortedCertificateChain;			
+			
+			//Assign byte array for storing certificate in DSS Store.
+			byte[][] certs = new byte[certificateChain.length][];
+			
+			//Assign byte array for storing certificate in DSS Store.
+			List<CRL> crlList = new ArrayList<CRL>();    
+			
+			//Fill certificate byte and CRLS
+			for(int i =0;i<certificateChain.length;i++){
+				certs[i] = certificateChain[i].getEncoded();
+				crlList.addAll(new DssHelper().readCRLsFromCert((X509Certificate) certificateChain[i]));
+			}	        
+			
+			//Loop getting All CRLS	        
+			byte[][] crls = new byte[crlList.size()][];
+			for (int i = 0 ; i < crlList.size();i++) {
 				crls[i] = ( (X509CRL) crlList.get(i)).getEncoded();
 			}
-	        
-	        Iterable<byte[]> certifiates = Arrays.asList(certs);
-	        COSDictionary dss = new DssHelper().createDssDictionary(certifiates,Arrays.asList(crls) , null);
-	        catalogDict.setItem(COSName.getPDFName("DSS"), dss);
-	     // =========================== For LTV Enable =========================== */
-
-	        // For big certificate chain
-	        SignatureOptions signatureOptions = new SignatureOptions();
-            signatureOptions.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2);
-
+			
+			Iterable<byte[]> certifiates = Arrays.asList(certs);
+			COSDictionary dss = new DssHelper().createDssDictionary(certifiates,Arrays.asList(crls) , null);
+			catalogDict.setItem(COSName.getPDFName("DSS"), dss);
+			// =========================== For LTV Enable =========================== */
+			
+			// For big certificate chain
+			SignatureOptions signatureOptions = new SignatureOptions();
+			signatureOptions.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2);
+			
 			doc.addSignature(signature, this, signatureOptions);
 			doc.saveIncremental(fos);
 
