@@ -205,6 +205,34 @@ public class SignAndTimeStamp implements SignatureInterface {
 		new SignAndTimeStamp().signPdf(inFile, outFile);
 	}
 	
+	public static void signWithTSAAndToken(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
+			String filePath, String tsaUrl, String keystorePath, String keystorePassword, String keystoreType)
+			throws IOException, GeneralSecurityException, SignatureException {
+		char[] password = passwordP12.toCharArray();
+
+		KeyStore keystore = KeyStore.getInstance("PKCS12");
+		keystore.load(new FileInputStream(filePath + inputFileP12), password);
+
+		Enumeration<String> aliases = keystore.aliases();
+		while(aliases.hasMoreElements()) {
+            String alias = (String)aliases.nextElement();
+            privateKey = (PrivateKey) keystore.getKey(alias, password);
+            certificate = keystore.getCertificate(alias);
+            certificateChain = keystore.getCertificateChain(alias);
+        }
+
+		if(!tsaUrl.isEmpty() && tsaUrl != null){
+			
+			MessageDigest digest = MessageDigest.getInstance("SHA-256");
+			tsaClient = new TSAClient(new URL(tsaUrl), filePath+keystorePath,
+					keystorePassword,keystoreType, digest);
+		}
+		
+		File inFile = new File(filePath + inputFileName);
+		File outFile = new File(filePath + outputFile);
+		new SignAndTimeStamp().signPdf(inFile, outFile);
+	}
+	
 	private CMSSignedData signTimeStamps(CMSSignedData signedData)
             throws IOException, TSPException, UnrecoverableKeyException, KeyManagementException, KeyStoreException, NoSuchAlgorithmException, CertificateException
     {
