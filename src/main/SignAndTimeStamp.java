@@ -1,5 +1,6 @@
 package main;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -14,6 +15,8 @@ import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.Provider;
+import java.security.Security;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CRL;
@@ -182,7 +185,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 			throws IOException, GeneralSecurityException, SignatureException {
 		char[] password = passwordP12.toCharArray();
 
-		KeyStore keystore = KeyStore.getInstance("PKCS12");
+		KeyStore keystore = KeyStore.getInstance(keystoreType);
 		keystore.load(new FileInputStream(filePath + inputFileP12), password);
 
 		Enumeration<String> aliases = keystore.aliases();
@@ -205,13 +208,30 @@ public class SignAndTimeStamp implements SignatureInterface {
 		new SignAndTimeStamp().signPdf(inFile, outFile);
 	}
 	
-	public static void signWithTSAAndToken(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
+	public static void signWithTSAandPKCS11(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
 			String filePath, String tsaUrl, String keystorePath, String keystorePassword, String keystoreType)
 			throws IOException, GeneralSecurityException, SignatureException {
+		passwordP12 ="P@ssw0rd";
 		char[] password = passwordP12.toCharArray();
-
-		KeyStore keystore = KeyStore.getInstance("PKCS12");
-		keystore.load(new FileInputStream(filePath + inputFileP12), password);
+		
+		String NAME = "eToken";
+		String PKCS11_LIB = "C:/windows/system32/eTPKCS11.dll";
+		String SLOT = "2";
+		
+		String configString = "name = "
+				  + NAME.replace(' ', '_')
+				  + "\n"
+				  + "library = "
+				  + PKCS11_LIB
+				  + "\nslot = "
+				  + SLOT;
+		
+		ByteArrayInputStream confStream = new ByteArrayInputStream(configString.getBytes());		
+		Provider p = new sun.security.pkcs11.SunPKCS11(confStream);
+		Security.addProvider(p);
+		
+		KeyStore keystore = KeyStore.getInstance("PKCS11",p);
+		keystore.load(null,password);
 
 		Enumeration<String> aliases = keystore.aliases();
 		while(aliases.hasMoreElements()) {
