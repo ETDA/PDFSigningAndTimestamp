@@ -1,4 +1,4 @@
-package util;
+package main.util;
 import java.awt.RenderingHints.Key;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;

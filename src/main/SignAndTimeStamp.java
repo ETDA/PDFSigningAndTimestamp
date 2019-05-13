@@ -62,7 +62,7 @@ import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.TSPException;
 import org.bouncycastle.util.Store;
 
-import util.X509Util;
+import main.util.X509Util;
 
 /**
  * The SignAndTimeStamp class is used to sign PDF(.pdf) with TSA 
