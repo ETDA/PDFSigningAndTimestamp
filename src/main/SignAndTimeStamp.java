@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
@@ -183,10 +185,26 @@ public class SignAndTimeStamp implements SignatureInterface {
 	public static void signWithTSA(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
 			String filePath, String tsaUrl, String keystorePath, String keystorePassword, String keystoreType)
 			throws IOException, GeneralSecurityException, SignatureException {
+		
+		KeyStore keystore = null;
 		char[] password = passwordP12.toCharArray();
-
-		KeyStore keystore = KeyStore.getInstance(keystoreType);
-		keystore.load(new FileInputStream(filePath + inputFileP12), password);
+		
+		if(keystoreType.equals("PKCS12")) {
+			keystore = KeyStore.getInstance(keystoreType);
+			keystore.load(new FileInputStream(filePath + inputFileP12), password);
+		}
+		
+		else if(keystoreType.equals("PKCS11")) {	
+			String configString = "";
+			configString = new String(Files.readAllBytes(Paths.get(filePath + inputFileP12)));
+			
+			ByteArrayInputStream confStream = new ByteArrayInputStream(configString.getBytes());		
+			Provider p = new sun.security.pkcs11.SunPKCS11(confStream);
+			Security.addProvider(p);
+			
+			keystore = KeyStore.getInstance(keystoreType,p);
+			keystore.load(null,password);
+		}
 
 		Enumeration<String> aliases = keystore.aliases();
 		while(aliases.hasMoreElements()) {
@@ -200,7 +218,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 			
 			MessageDigest digest = MessageDigest.getInstance("SHA-256");
 			tsaClient = new TSAClient(new URL(tsaUrl), filePath+keystorePath,
-					keystorePassword,keystoreType, digest);
+					keystorePassword,"PKCS12", digest);
 		}
 		
 		File inFile = new File(filePath + inputFileName);
@@ -208,7 +226,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 		new SignAndTimeStamp().signPdf(inFile, outFile);
 	}
 	
-	public static void signWithTSAandPKCS11(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
+	/*public static void signWithTSAandPKCS11(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
 			String filePath, String tsaUrl, String keystorePath, String keystorePassword, String keystoreType)
 			throws IOException, GeneralSecurityException, SignatureException {
 		passwordP12 ="P@ssw0rd";
@@ -252,6 +270,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 		File outFile = new File(filePath + outputFile);
 		new SignAndTimeStamp().signPdf(inFile, outFile);
 	}
+	*/
 	
 	private CMSSignedData signTimeStamps(CMSSignedData signedData)
             throws IOException, TSPException, UnrecoverableKeyException, KeyManagementException, KeyStoreException, NoSuchAlgorithmException, CertificateException
