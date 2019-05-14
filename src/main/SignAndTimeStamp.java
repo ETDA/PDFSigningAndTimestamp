@@ -1,5 +1,6 @@
 package main;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -7,6 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
@@ -14,6 +17,8 @@ import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.Provider;
+import java.security.Security;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CRL;
@@ -57,6 +62,8 @@ import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.TSPException;
 import org.bouncycastle.util.Store;
 
+import main.util.X509Util;
+
 /**
  * The SignAndTimeStamp class is used to sign PDF(.pdf) with TSA 
  * 
@@ -72,6 +79,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 	boolean signPdf(File pdfFile, File signedPdfFile) throws IOException {
 		PDDocument doc = null;
 		try {
+			
 			doc = PDDocument.load(pdfFile);
 			OutputStream fos = new FileOutputStream(signedPdfFile);
 			PDSignature signature = new PDSignature();
@@ -83,26 +91,39 @@ public class SignAndTimeStamp implements SignatureInterface {
 			catalogDict.setNeedToBeUpdated(true);
 
 			// =========================== For LTV Enable ===========================
-	        byte[][] certs = new byte[certificateChain.length][];
-	        for(int i =0;i<certificateChain.length;i++){
-	        	certs[i] = certificateChain[i].getEncoded();
-	        }
-	        
-	        List<CRL> crlList = new DssHelper().readCRLsFromCert((X509Certificate) certificateChain[0]);
-	        byte[][] crls = new byte[crlList.size()][];
-	        for (int i = 0 ; i < crlList.size();i++) {
+			
+			//Sorted Certificate 0 = E Entity , 1 = intermediate , 2 = root	 			
+			Certificate[] sortedCertificateChain = X509Util.SortX509Chain(certificateChain,certificate);
+			certificateChain = sortedCertificateChain;
+			
+			//Assign byte array for storing certificate in DSS Store.
+			byte[][] certs = new byte[certificateChain.length][];
+			
+			//Assign byte array for storing certificate in DSS Store.
+			List<CRL> crlList = new ArrayList<CRL>();
+			
+			//Fill certificate byte and CRLS
+			for(int i =0;i<certificateChain.length;i++){
+				certs[i] = certificateChain[i].getEncoded();
+				crlList.addAll(new DssHelper().readCRLsFromCert((X509Certificate) certificateChain[i]));
+			}
+			
+			//Loop getting All CRLS	        
+			byte[][] crls = new byte[crlList.size()][];
+			for (int i = 0 ; i < crlList.size();i++) {
 				crls[i] = ( (X509CRL) crlList.get(i)).getEncoded();
 			}
-	        
-	        Iterable<byte[]> certifiates = Arrays.asList(certs);
-	        COSDictionary dss = new DssHelper().createDssDictionary(certifiates,Arrays.asList(crls) , null);
-	        catalogDict.setItem(COSName.getPDFName("DSS"), dss);
-	     // =========================== For LTV Enable =========================== */
-
-	        // For big certificate chain
-	        SignatureOptions signatureOptions = new SignatureOptions();
-            signatureOptions.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2);
-
+			
+			Iterable<byte[]> certifiates = Arrays.asList(certs);
+			COSDictionary dss = new DssHelper().createDssDictionary(certifiates,Arrays.asList(crls) , null);
+			catalogDict.setItem(COSName.getPDFName("DSS"), dss);
+			
+			// =========================== For LTV Enable =========================== */
+			
+			// For big certificate chain
+			SignatureOptions signatureOptions = new SignatureOptions();
+			signatureOptions.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2);
+			
 			doc.addSignature(signature, this, signatureOptions);
 			doc.saveIncremental(fos);
 
@@ -129,7 +150,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 			org.bouncycastle.asn1.x509.Certificate cert = org.bouncycastle.asn1.x509.Certificate
 					.getInstance(ASN1Primitive.fromByteArray(certificate.getEncoded()));
 			ContentSigner sha512Signer = new JcaContentSignerBuilder("SHA256WithRSA").build(privateKey);
-
+			
 			gen.addSignerInfoGenerator(
 					new JcaSignerInfoGeneratorBuilder(new JcaDigestCalculatorProviderBuilder().build())
 							.build(sha512Signer, new X509CertificateHolder(cert)));
@@ -166,10 +187,26 @@ public class SignAndTimeStamp implements SignatureInterface {
 	public static void signWithTSA(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
 			String filePath, String tsaUrl, String keystorePath, String keystorePassword, String keystoreType)
 			throws IOException, GeneralSecurityException, SignatureException {
+		
+		KeyStore keystore = null;
 		char[] password = passwordP12.toCharArray();
-
-		KeyStore keystore = KeyStore.getInstance("PKCS12");
-		keystore.load(new FileInputStream(filePath + inputFileP12), password);
+		
+		if(keystoreType.equals("PKCS12")) {
+			keystore = KeyStore.getInstance(keystoreType);
+			keystore.load(new FileInputStream(filePath + inputFileP12), password);
+		}
+		
+		else if(keystoreType.equals("PKCS11")) {	
+			String configString = "";
+			configString = new String(Files.readAllBytes(Paths.get(filePath + inputFileP12)));
+			
+			ByteArrayInputStream confStream = new ByteArrayInputStream(configString.getBytes());		
+			Provider p = new sun.security.pkcs11.SunPKCS11(confStream);
+			Security.addProvider(p);
+			
+			keystore = KeyStore.getInstance(keystoreType,p);
+			keystore.load(null,password);
+		}
 
 		Enumeration<String> aliases = keystore.aliases();
 		while(aliases.hasMoreElements()) {
@@ -183,13 +220,15 @@ public class SignAndTimeStamp implements SignatureInterface {
 			
 			MessageDigest digest = MessageDigest.getInstance("SHA-256");
 			tsaClient = new TSAClient(new URL(tsaUrl), filePath+keystorePath,
-					keystorePassword,keystoreType, digest);
+					keystorePassword,"PKCS12", digest);
 		}
 		
 		File inFile = new File(filePath + inputFileName);
 		File outFile = new File(filePath + outputFile);
 		new SignAndTimeStamp().signPdf(inFile, outFile);
 	}
+	
+
 	
 	private CMSSignedData signTimeStamps(CMSSignedData signedData)
             throws IOException, TSPException, UnrecoverableKeyException, KeyManagementException, KeyStoreException, NoSuchAlgorithmException, CertificateException

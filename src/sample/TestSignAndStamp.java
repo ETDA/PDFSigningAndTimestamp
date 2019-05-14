@@ -11,15 +11,15 @@ public class TestSignAndStamp {
 
 		
 		/**** Sample Input ****/
-		/*String passwordP12 = "123456789";
-		String inputFileP12 = "key.p12";
+		/*String passwordP12 = "password";
+		String inputFileP12 = "cert_sign_01.p12" || "PKCS11Config.txt";
 		String inputFileName = "pdfA3.pdf";
 		String outputFile = "tsa_signed.pdf";
 		String filePath = "resources/";
-		String tsaUrl = "https://test.time.teda.th";
+		String tsaUrl = "https://time-test.teda.th";
 		String keystorePath = "KeystorePath";
 		String keystorePassword = "KeystorePassword";
-		String keystoreType = "PKCS12";
+		String keystoreType = "PKCS12" || "PKCS11";
 		*/
 		
 		String passwordP12 = args[0];
@@ -31,8 +31,11 @@ public class TestSignAndStamp {
 		String keystorePath = args[6];
 		String keystorePassword = args[7];
 		String keystoreType = args[8];
+
 		
-		SignAndTimeStamp.signWithTSA(passwordP12, inputFileP12, inputFileName, outputFile, filePath, tsaUrl, keystorePath, keystorePassword,keystoreType);
+		SignAndTimeStamp.signWithTSA(passwordP12, inputFileP12, inputFileName, outputFile, 
+									filePath, tsaUrl, keystorePath, keystorePassword,keystoreType);
+		
 
 		System.out.println("********Sign And TimeStamp Done**********");
 	}
