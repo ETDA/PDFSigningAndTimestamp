@@ -12,7 +12,7 @@ public class TestSignAndStamp {
 		
 		/**** Sample Input ****/
 		/*String passwordP12 = "password";
-		String inputFileP12 = "key.p12" || "PKCS11Config.txt";
+		String inputFileP12 = "cert_sign_01.p12" || "PKCS11Config.txt";
 		String inputFileName = "pdfA3.pdf";
 		String outputFile = "tsa_signed.pdf";
 		String filePath = "resources/";
