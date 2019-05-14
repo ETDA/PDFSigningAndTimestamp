@@ -26,20 +26,9 @@ public class X509Util {
 
 	public static X509Certificate X509FromToken(TimeStampToken token)
 			throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException {
-		/*
-		 * Store cs = token.getCertificates();
-		 * 
-		 * @SuppressWarnings("unchecked") ArrayList<X509CertificateHolder> c =
-		 * (ArrayList<X509CertificateHolder>)cs.getMatches(null); CertificateFactory
-		 * certFactory = CertificateFactory.getInstance("X.509"); InputStream in = new
-		 * ByteArrayInputStream(c.get(0).getEncoded()); X509Certificate cert =
-		 * (X509Certificate)certFactory.generateCertificate(in);
-		 * 
-		 * if (cert == null){throw new WSException(WSErrorCode.NO_CERT_FROM_TOKEN);}
-		 * return cert;
-		 */
-
+		
 		Store cs = token.getCertificates();
+		
 		@SuppressWarnings("unchecked")
 		ArrayList<X509CertificateHolder> c = (ArrayList<X509CertificateHolder>) cs.getMatches(null);
 		X509Certificate[] certStore = new X509Certificate[c.size()];

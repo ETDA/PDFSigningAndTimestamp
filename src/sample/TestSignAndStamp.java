@@ -33,7 +33,8 @@ public class TestSignAndStamp {
 		String keystoreType = args[8];
 
 		
-		SignAndTimeStamp.signWithTSA(passwordP12, inputFileP12, inputFileName, outputFile, filePath, tsaUrl, keystorePath, keystorePassword,keystoreType);
+		SignAndTimeStamp.signWithTSA(passwordP12, inputFileP12, inputFileName, outputFile, 
+									filePath, tsaUrl, keystorePath, keystorePassword,keystoreType);
 		
 
 		System.out.println("********Sign And TimeStamp Done**********");

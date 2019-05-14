@@ -79,6 +79,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 	boolean signPdf(File pdfFile, File signedPdfFile) throws IOException {
 		PDDocument doc = null;
 		try {
+			
 			doc = PDDocument.load(pdfFile);
 			OutputStream fos = new FileOutputStream(signedPdfFile);
 			PDSignature signature = new PDSignature();
@@ -93,19 +94,19 @@ public class SignAndTimeStamp implements SignatureInterface {
 			
 			//Sorted Certificate 0 = E Entity , 1 = intermediate , 2 = root	 			
 			Certificate[] sortedCertificateChain = X509Util.SortX509Chain(certificateChain,certificate);
-			certificateChain = sortedCertificateChain;			
+			certificateChain = sortedCertificateChain;
 			
 			//Assign byte array for storing certificate in DSS Store.
 			byte[][] certs = new byte[certificateChain.length][];
 			
 			//Assign byte array for storing certificate in DSS Store.
-			List<CRL> crlList = new ArrayList<CRL>();    
+			List<CRL> crlList = new ArrayList<CRL>();
 			
 			//Fill certificate byte and CRLS
 			for(int i =0;i<certificateChain.length;i++){
 				certs[i] = certificateChain[i].getEncoded();
 				crlList.addAll(new DssHelper().readCRLsFromCert((X509Certificate) certificateChain[i]));
-			}	        
+			}
 			
 			//Loop getting All CRLS	        
 			byte[][] crls = new byte[crlList.size()][];
@@ -116,6 +117,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 			Iterable<byte[]> certifiates = Arrays.asList(certs);
 			COSDictionary dss = new DssHelper().createDssDictionary(certifiates,Arrays.asList(crls) , null);
 			catalogDict.setItem(COSName.getPDFName("DSS"), dss);
+			
 			// =========================== For LTV Enable =========================== */
 			
 			// For big certificate chain
@@ -148,7 +150,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 			org.bouncycastle.asn1.x509.Certificate cert = org.bouncycastle.asn1.x509.Certificate
 					.getInstance(ASN1Primitive.fromByteArray(certificate.getEncoded()));
 			ContentSigner sha512Signer = new JcaContentSignerBuilder("SHA256WithRSA").build(privateKey);
-
+			
 			gen.addSignerInfoGenerator(
 					new JcaSignerInfoGeneratorBuilder(new JcaDigestCalculatorProviderBuilder().build())
 							.build(sha512Signer, new X509CertificateHolder(cert)));
@@ -226,51 +228,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 		new SignAndTimeStamp().signPdf(inFile, outFile);
 	}
 	
-	/*public static void signWithTSAandPKCS11(String passwordP12, String inputFileP12, String inputFileName, String outputFile,
-			String filePath, String tsaUrl, String keystorePath, String keystorePassword, String keystoreType)
-			throws IOException, GeneralSecurityException, SignatureException {
-		passwordP12 ="P@ssw0rd";
-		char[] password = passwordP12.toCharArray();
-		
-		String NAME = "eToken";
-		String PKCS11_LIB = "C:/windows/system32/eTPKCS11.dll";
-		String SLOT = "2";
-		
-		String configString = "name = "
-				  + NAME.replace(' ', '_')
-				  + "\n"
-				  + "library = "
-				  + PKCS11_LIB
-				  + "\nslot = "
-				  + SLOT;
-		
-		ByteArrayInputStream confStream = new ByteArrayInputStream(configString.getBytes());		
-		Provider p = new sun.security.pkcs11.SunPKCS11(confStream);
-		Security.addProvider(p);
-		
-		KeyStore keystore = KeyStore.getInstance("PKCS11",p);
-		keystore.load(null,password);
 
-		Enumeration<String> aliases = keystore.aliases();
-		while(aliases.hasMoreElements()) {
-            String alias = (String)aliases.nextElement();
-            privateKey = (PrivateKey) keystore.getKey(alias, password);
-            certificate = keystore.getCertificate(alias);
-            certificateChain = keystore.getCertificateChain(alias);
-        }
-
-		if(!tsaUrl.isEmpty() && tsaUrl != null){
-			
-			MessageDigest digest = MessageDigest.getInstance("SHA-256");
-			tsaClient = new TSAClient(new URL(tsaUrl), filePath+keystorePath,
-					keystorePassword,keystoreType, digest);
-		}
-		
-		File inFile = new File(filePath + inputFileName);
-		File outFile = new File(filePath + outputFile);
-		new SignAndTimeStamp().signPdf(inFile, outFile);
-	}
-	*/
 	
 	private CMSSignedData signTimeStamps(CMSSignedData signedData)
             throws IOException, TSPException, UnrecoverableKeyException, KeyManagementException, KeyStoreException, NoSuchAlgorithmException, CertificateException
