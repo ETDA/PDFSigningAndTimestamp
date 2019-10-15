@@ -105,6 +105,7 @@ public class SignAndTimeStamp implements SignatureInterface {
 			//Fill certificate byte and CRLS
 			for(int i =0;i<certificateChain.length;i++){
 				certs[i] = certificateChain[i].getEncoded();
+				if(i==certificateChain.length-1) {break;}
 				crlList.addAll(new DssHelper().readCRLsFromCert((X509Certificate) certificateChain[i]));
 			}
 			
