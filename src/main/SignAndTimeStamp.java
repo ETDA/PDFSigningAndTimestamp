@@ -33,7 +33,6 @@ import java.util.Enumeration;
 import java.util.List;
 
 import org.apache.pdfbox.cos.COSDictionary;
-import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
@@ -46,23 +45,29 @@ import org.bouncycastle.asn1.DERSet;
 import org.bouncycastle.asn1.cms.Attribute;
 import org.bouncycastle.asn1.cms.AttributeTable;
 import org.bouncycastle.asn1.cms.Attributes;
+import org.bouncycastle.asn1.cms.CMSAttributes;
+import org.bouncycastle.asn1.cms.CMSObjectIdentifiers;
+import org.bouncycastle.asn1.ocsp.OCSPResponse;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
+import org.bouncycastle.asn1.x509.CertificateList;
 import org.bouncycastle.cert.X509CRLHolder;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaCertStore;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.ocsp.OCSPResp;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.CMSSignedDataGenerator;
+import org.bouncycastle.cms.DefaultSignedAttributeTableGenerator;
+import org.bouncycastle.cms.SignerInfoGenerator;
+import org.bouncycastle.cms.SignerInfoGeneratorBuilder;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.SignerInformationStore;
-import org.bouncycastle.cms.jcajce.JcaSignerInfoGeneratorBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.TSPException;
 import org.bouncycastle.util.Store;
 
-import main.util.X509Util;
+import main.util.RevocationValues;
 
 /**
  * The SignAndTimeStamp class is used to sign PDF(.pdf) with TSA 
@@ -90,38 +95,8 @@ public class SignAndTimeStamp implements SignatureInterface {
 			COSDictionary catalogDict = doc.getDocumentCatalog().getCOSObject();
 			catalogDict.setNeedToBeUpdated(true);
 
-			// =========================== For LTV Enable ===========================
-			
-			//Sorted Certificate 0 = E Entity , 1 = intermediate , 2 = root	 			
-			Certificate[] sortedCertificateChain = X509Util.SortX509Chain(certificateChain,certificate);
-			certificateChain = sortedCertificateChain;
-			
-			//Assign byte array for storing certificate in DSS Store.
-			byte[][] certs = new byte[certificateChain.length][];
-			
-			//Assign byte array for storing certificate in DSS Store.
-			List<CRL> crlList = new ArrayList<CRL>();
-			
-			//Fill certificate byte and CRLS
-			for(int i =0;i<certificateChain.length;i++){
-				certs[i] = certificateChain[i].getEncoded();
-				if(i==certificateChain.length-1) {break;}
-				crlList.addAll(new DssHelper().readCRLsFromCert((X509Certificate) certificateChain[i]));
-			}
-			
-			//Loop getting All CRLS	        
-			byte[][] crls = new byte[crlList.size()][];
-			for (int i = 0 ; i < crlList.size();i++) {
-				crls[i] = ( (X509CRL) crlList.get(i)).getEncoded();
-			}
-			
-			Iterable<byte[]> certifiates = Arrays.asList(certs);
-			COSDictionary dss = new DssHelper().createDssDictionary(certifiates,Arrays.asList(crls) , null);
-			catalogDict.setItem(COSName.getPDFName("DSS"), dss);
-			
-			// =========================== For LTV Enable =========================== */
-			
-			// For big certificate chain
+			// For add CRL, OCSP and timestamp token : SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2 
+			// Add more for big chain certificate
 			SignatureOptions signatureOptions = new SignatureOptions();
 			signatureOptions.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2);
 			
@@ -147,16 +122,68 @@ public class SignAndTimeStamp implements SignatureInterface {
 			@SuppressWarnings("rawtypes")
 			Store certStore = new JcaCertStore(certList);
 
-			CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
+			ContentSigner sha512Signer = new JcaContentSignerBuilder("SHA256WithRSA").build(privateKey);
 			org.bouncycastle.asn1.x509.Certificate cert = org.bouncycastle.asn1.x509.Certificate
 					.getInstance(ASN1Primitive.fromByteArray(certificate.getEncoded()));
-			ContentSigner sha512Signer = new JcaContentSignerBuilder("SHA256WithRSA").build(privateKey);
 			
-			gen.addSignerInfoGenerator(
-					new JcaSignerInfoGeneratorBuilder(new JcaDigestCalculatorProviderBuilder().build())
-							.build(sha512Signer, new X509CertificateHolder(cert)));
+	        ASN1EncodableVector signedAttributes = new ASN1EncodableVector();
+	        signedAttributes.add(new Attribute(CMSAttributes.contentType, new DERSet(CMSObjectIdentifiers.data)));
+	        
+	     // =========================== For LTV Enable ===========================
+	        List<CRL> crlList = new DssHelper().readCRLsFromCert((X509Certificate) certificate);
+	        CertificateList[] certRevList = new CertificateList[crlList.size()];
+	        
+	        for(int i=0; i<crlList.size(); i++) {
+	        	X509CRL crl = (X509CRL) crlList.get(0);
+	        	X509CRLHolder crlHolder = new X509CRLHolder(crl.getEncoded());
+	  	        certRevList[i] = crlHolder.toASN1Structure();
+	        }
+	        
+	        List<OCSPResponse> ocspList = new ArrayList<OCSPResponse>();
+	        for (int i=0; i<certificateChain.length; i++) {
+				X509Certificate certTemp = (X509Certificate) certificateChain[i];
+				if (!certTemp.getIssuerDN().equals(certTemp.getSubjectDN())) {
+					
+					X509Certificate issuerCert = (X509Certificate) certificateChain[i+1];
+					if(issuerCert == null) {
+						issuerCert = new GetOcspResp().getIssuerCert(certTemp);
+					}
+					OCSPResp ocspResp = new GetOcspResp().getOcspResp(certTemp, issuerCert);
+					if (ocspResp != null) {
+						ocspList.add(OCSPResponse.getInstance(ocspResp.getEncoded()));
+					}
+				}
+			}
+
+	        OCSPResponse[] ocsps = new OCSPResponse[ocspList.size()];
+	        for(int i=0; i<ocspList.size(); i++) {
+	        	ocsps[i] = ocspList.get(i);
+	        }
+
+	
+	        RevocationValues revValues = new RevocationValues(certRevList, ocsps, null);
+	        
+	        signedAttributes.add(new Attribute(new ASN1ObjectIdentifier("1.2.840.113583.1.1.8"), new DERSet(revValues)));
+	        
+	     // =========================== For LTV Enable =========================== 
+	        
+	        AttributeTable signedAttributesTable = new AttributeTable(signedAttributes);
+	        signedAttributesTable.toASN1EncodableVector();
+			DefaultSignedAttributeTableGenerator signedAttributeGenerator = new DefaultSignedAttributeTableGenerator(
+					signedAttributesTable);
+
+			SignerInfoGeneratorBuilder signerInfoBuilder = new SignerInfoGeneratorBuilder(
+					new JcaDigestCalculatorProviderBuilder().build());
+			signerInfoBuilder.setSignedAttributeGenerator(signedAttributeGenerator);
+        
+	        SignerInfoGenerator signerInfoGen = signerInfoBuilder.build(sha512Signer, new X509CertificateHolder(cert));
+
+	        CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
+
+	        gen.addSignerInfoGenerator(signerInfoGen);
+
 			gen.addCertificates(certStore);
-			
+
 			CMSProcessableInputStream msg = new CMSProcessableInputStream(is);
 			CMSSignedData signedData = gen.generate(msg,false);
 			
