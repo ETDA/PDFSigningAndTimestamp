@@ -41,21 +41,18 @@ import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.ASN1EncodableVector;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.ASN1Primitive;
-import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.DERSet;
 import org.bouncycastle.asn1.cms.Attribute;
 import org.bouncycastle.asn1.cms.AttributeTable;
 import org.bouncycastle.asn1.cms.Attributes;
 import org.bouncycastle.asn1.cms.CMSAttributes;
 import org.bouncycastle.asn1.cms.CMSObjectIdentifiers;
-import org.bouncycastle.asn1.ocsp.BasicOCSPResponse;
 import org.bouncycastle.asn1.ocsp.OCSPResponse;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.CertificateList;
 import org.bouncycastle.cert.X509CRLHolder;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.jcajce.JcaCertStore;
-import org.bouncycastle.cert.ocsp.BasicOCSPResp;
 import org.bouncycastle.cert.ocsp.OCSPResp;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.CMSSignedDataGenerator;
@@ -98,9 +95,10 @@ public class SignAndTimeStamp implements SignatureInterface {
 			COSDictionary catalogDict = doc.getDocumentCatalog().getCOSObject();
 			catalogDict.setNeedToBeUpdated(true);
 
-			// For add CRL, OCSP and timestamp token
+			// For add CRL, OCSP and timestamp token : SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2 
+			// Add more for big chain certificate
 			SignatureOptions signatureOptions = new SignatureOptions();
-			signatureOptions.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE *3);
+			signatureOptions.setPreferredSignatureSize(SignatureOptions.DEFAULT_SIGNATURE_SIZE * 2);
 			
 			doc.addSignature(signature, this, signatureOptions);
 			doc.saveIncremental(fos);
@@ -249,8 +247,8 @@ public class SignAndTimeStamp implements SignatureInterface {
 		if(!tsaUrl.isEmpty() && tsaUrl != null){
 			
 			MessageDigest digest = MessageDigest.getInstance("SHA-256");
-			tsaClient = new TSAClient(new URL(tsaUrl), "",
-					"", digest);
+			tsaClient = new TSAClient(new URL(tsaUrl), filePath+keystorePath,
+					keystorePassword,"PKCS12", digest);
 		}
 		
 		File inFile = new File(filePath + inputFileName);
